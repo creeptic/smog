@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"io/ioutil"
 
 	base58 "github.com/jbenet/go-base58"
 )
@@ -15,15 +14,12 @@ var (
 // Read file, break it into blocks and publish them into IPFS network
 // gradually encrypting each one with viewKey
 func Vaporize(passphrase, filename string) (string, error) {
-	fmtstr := "Vaporizing file '%s' with passphrase '%s'\n"
-	fmt.Printf(fmtstr, filename, passphrase)
-
 	ipfsContext, err := NewIpfsContext()
 	if err != nil {
 		return "", err
 	}
 
-	fileBlocks, err := getRawFileBlocks(filename)
+	fileBlocks, err := getFileBlocks(filename)
 	if err != nil {
 		return "", err
 	}
@@ -38,16 +34,4 @@ func Vaporize(passphrase, filename string) (string, error) {
 		}
 	}
 	return base58.Encode(nextBlockId), nil
-}
-
-func getRawFileBlocks(filename string) ([][]byte, error) {
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-	var res [][]byte
-	for i := 0; i < len(data); i += BlockSize {
-		res = append(res, data[i:i+BlockSize])
-	}
-	return res, nil
 }

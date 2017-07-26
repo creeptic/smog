@@ -10,9 +10,6 @@ import (
 // Gradually fetch raw blocks from IPFS network and
 // decrypt them into a file
 func Condense(passphrase, headId string) (string, error) {
-	fmtstr := "Condensing file '%s' with passphrase '%s'\n"
-	fmt.Printf(fmtstr, headId, passphrase)
-
 	ipfsContext, err := NewIpfsContext()
 	if err != nil {
 		return "", err

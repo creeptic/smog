@@ -10,6 +10,7 @@ var (
 	defaultAPIAddr  = "/ip4/127.0.0.1/tcp/5001"
 )
 
+// Abstract IPFS API provider description
 type IpfsContext interface {
 	GetBlock(id []byte) ([]byte, error)
 	PutBlock(block []byte) ([]byte, error)
@@ -19,6 +20,7 @@ func NewIpfsContext() (IpfsContext, error) {
 	return &ipfsContext{shell: shell.NewShell(defaultAPIAddr)}, nil
 }
 
+// IPFS API provider implementation
 type ipfsContext struct {
 	shell *shell.Shell
 }
