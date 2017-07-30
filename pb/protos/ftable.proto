@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+option go_package = "pb";
+
+message Header {
+  bytes salt    = 1;
+  bytes nonce   = 2;
+  bytes tableID = 3;
+}
+
+message BlockTable {
+  bytes nonce           = 1;
+  repeated bytes blocks = 2;
+}
