@@ -89,8 +89,13 @@ func Vaporize(passphrase, filename string) (string, error) {
 
 func getBlocks(data []byte, blocksize int) [][]byte {
 	var res [][]byte
-	for i := 0; i < len(data); i += blocksize {
-		res = append(res, data[i:i+blocksize])
+	length := len(data)
+	for i := 0; i < length; i += blocksize {
+		end := i + blocksize
+		if end > length {
+			end = length
+		}
+		res = append(res, data[i:end])
 	}
 	return res
 }
