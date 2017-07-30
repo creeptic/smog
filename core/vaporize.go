@@ -11,11 +11,11 @@ import (
 )
 
 var (
-	BlockSize = 32
-	IdSize    = 34
-	KeySize   = 32
-	NonceSize = 16
-	SaltSize  = 32
+	BLOCK = 32
+	ID    = 34
+	KEY   = 32
+	NONCE = 16
+	SALT  = 32
 )
 
 // Read file, break it into blocks and publish them into IPFS network
@@ -26,42 +26,56 @@ func Vaporize(passphrase, filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Generate required cryptographic values
+	buf := make([]byte, SALT+2*NONCE)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	salt, fnonce, tnonce := buf[:SALT], buf[SALT:SALT+NONCE], buf[SALT+NONCE:]
+	fkey, tkey := ExpandPassphrase([]byte(passphrase), salt)
+
+	// Expand passphrase into a suitable encryption key
+	fcipher, err := NewSmogCipher(fkey, fnonce)
+	if err != nil {
+		return "", err
+	}
+
 	// Read raw data
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return "", err
 	}
 
-	// Break file data into blocks
-	fileBlocks := getBlocks(data, BlockSize)
-
-	// Generate required randomness
-	salt, nonce, err := generateRandomness()
-	if err != nil {
-		return "", err
-	}
-
-	// Expand passphrase into a suitable encryption key
-	cipher, err := NewSmogCipher(base58.Decode(passphrase), salt, nonce)
-	if err != nil {
-		return "", err
-	}
-
 	// Store blocks in IPFS chaining them by IDs and encrypting
-	nextBlockId := make([]byte, IdSize)
-	for _, rawBlock := range fileBlocks {
-		markedBlock := append(nextBlockId, rawBlock...)
-		securedBlock := cipher.Encrypt(markedBlock)
-		nextBlockId, err = ipfsContext.PutBlock(securedBlock)
+	ftable := make([][]byte, 0)
+	for _, block := range getBlocks(fcipher.Encrypt(data), BLOCK) {
+		blockID, err := ipfsContext.PutBlock(block)
 		if err != nil {
 			fstr := "[vaporize]: failed to put a new block: %s"
 			return "", fmt.Errorf(fstr, err)
 		}
-		fmt.Printf("Storing %s\n\n", base58.Encode(nextBlockId))
+		ftable = append(ftable, blockID)
+		fmt.Printf("Storing %s\n\n", base58.Encode(blockID))
+	}
+
+	// Encrypt and store table in IPFS
+	table := pb.BlockTable{Nonce: fnonce, Blocks: ftable}
+	tableBytes, err := proto.Marshal(&table)
+	if err != nil {
+		return "", err
+	}
+	tcipher, err := NewSmogCipher(tkey, tnonce)
+	if err != nil {
+		return "", err
+	}
+	tableID, err := ipfsContext.PutBlock(tcipher.Encrypt(tableBytes))
+	if err != nil {
+		return "", err
 	}
 
 	// Store header in IPFS, return its ID as a link to the data
-	header := pb.Header{Salt: salt, Nonce: nonce, Head: nextBlockId}
+	header := pb.Header{Salt: salt, Nonce: tnonce, TableID: tableID}
 	headerBytes, err := proto.Marshal(&header)
 	if err != nil {
 		return "", err
@@ -71,14 +85,6 @@ func Vaporize(passphrase, filename string) (string, error) {
 		return "", err
 	}
 	return base58.Encode(headerID), nil
-}
-
-func generateRandomness() ([]byte, []byte, error) {
-	buf := make([]byte, SaltSize+NonceSize)
-	if _, err := rand.Read(buf); err != nil {
-		return nil, nil, err
-	}
-	return buf[:SaltSize], buf[SaltSize:], nil
 }
 
 func getBlocks(data []byte, blocksize int) [][]byte {
