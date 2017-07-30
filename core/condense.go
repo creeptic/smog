@@ -27,31 +27,43 @@ func Condense(passphrase, headId string) (string, error) {
 	if err := proto.Unmarshal(headerBytes, &header); err != nil {
 		return "", err
 	}
+	salt, tnonce, tableID := header.Salt, header.Nonce, header.TableID
 
-	// Expand passphrase
-	cipher, err := NewSmogCipher(base58.Decode(passphrase), header.Salt, header.Nonce)
+	// Restore keys
+	fkey, tkey := ExpandPassphrase([]byte(passphrase), salt)
+
+	// Fetch table from IPFS and decrypt its data
+	tbytes, err := ipfsContext.GetBlock(tableID)
 	if err != nil {
 		return "", err
 	}
+	tcipher, err := NewSmogCipher(tkey, tnonce)
+	if err != nil {
+		return "", err
+	}
+	var table pb.BlockTable
+	if err := proto.Unmarshal(tcipher.Decrypt(tbytes), &table); err != nil {
+		return "", err
+	}
+	fnonce, blockIDs := table.Nonce, table.Blocks
 
-	//
-	var blocks [][]byte
-	nullBlockId, nextBlockId := make([]byte, IdSize), header.Head
-	for !bytes.Equal(nextBlockId, nullBlockId) {
-		fmt.Printf("Retrieving %s\n", base58.Encode(nextBlockId))
-		securedblock, err := ipfsContext.GetBlock(nextBlockId)
+	// Fetch blocks one by one from IPFS, encrypting each one
+	// and getting next block ID from it
+	blocks := make([][]byte, 0)
+	for _, blockID := range blockIDs {
+		fmt.Printf("Retrieving %s\n", base58.Encode(blockID))
+		block, err := ipfsContext.GetBlock(blockID)
 		if err != nil {
 			fstr := "[condense]: failed to retrieve a block: %s"
 			return "", fmt.Errorf(fstr, err)
 		}
-		markedBlock := cipher.Decrypt(securedblock)
-		var rawBlock []byte
-		nextBlockId, rawBlock = markedBlock[:IdSize], markedBlock[IdSize:]
-		blocks = append(blocks, rawBlock)
+		blocks = append(blocks, block)
 	}
-	// Wait what? Really? It's 2017!
-	for i, j := 0, len(blocks)-1; i < j; i, j = i+1, j-1 {
-		blocks[i], blocks[j] = blocks[j], blocks[i]
+
+	// Concatenate blocks and return decrypted result
+	fcipher, err := NewSmogCipher(fkey, fnonce)
+	if err != nil {
+		return "", err
 	}
-	return string(bytes.Join(blocks, []byte{})), nil
+	return string(fcipher.Decrypt(bytes.Join(blocks, []byte{}))), nil
 }
