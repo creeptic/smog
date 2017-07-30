@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io/ioutil"
 
@@ -53,10 +54,10 @@ func Vaporize(passphrase, filename string) (string, error) {
 		blockID, err := ipfsContext.PutBlock(block)
 		if err != nil {
 			fstr := "[vaporize]: failed to put a new block: %s"
-			return "", fmt.Errorf(fstr, err)
+			return "", errors.New(fmt.Sprintf(fstr, err))
 		}
 		ftable = append(ftable, blockID)
-		fmt.Printf("Storing %s\n\n", base58.Encode(blockID))
+
 	}
 
 	// Encrypt and store table in IPFS

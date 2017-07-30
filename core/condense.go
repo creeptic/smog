@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/creeptic/smog/pb"
@@ -51,11 +52,10 @@ func Condense(passphrase, headId string) (string, error) {
 	// and getting next block ID from it
 	blocks := make([][]byte, 0)
 	for _, blockID := range blockIDs {
-		fmt.Printf("Retrieving %s\n", base58.Encode(blockID))
 		block, err := ipfsContext.GetBlock(blockID)
 		if err != nil {
 			fstr := "[condense]: failed to retrieve a block: %s"
-			return "", fmt.Errorf(fstr, err)
+			return "", errors.New(fmt.Sprintf(fstr, err))
 		}
 		blocks = append(blocks, block)
 	}
