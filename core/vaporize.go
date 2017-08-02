@@ -11,7 +11,7 @@ import (
 	base58 "github.com/jbenet/go-base58"
 )
 
-var (
+const (
 	BLOCK = 32
 	ID    = 34
 	KEY   = 32
@@ -36,59 +36,85 @@ func Vaporize(passphrase, filename string) (string, error) {
 	salt, fnonce, tnonce := buf[:SALT], buf[SALT:SALT+NONCE], buf[SALT+NONCE:]
 	fkey, tkey := ExpandPassphrase([]byte(passphrase), salt)
 
-	// Expand passphrase into a suitable encryption key
-	fcipher, err := NewSmogCipher(fkey, fnonce)
-	if err != nil {
-		return "", err
-	}
-
 	// Read raw data
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return "", err
 	}
 
-	// Store blocks in IPFS chaining them by IDs and encrypting
-	ftable := make([][]byte, 0)
-	for _, block := range getBlocks(fcipher.Encrypt(data), BLOCK) {
-		blockID, err := ipfsContext.PutBlock(block)
-		if err != nil {
-			fstr := "[vaporize]: failed to put a new block: %s"
-			return "", errors.New(fmt.Sprintf(fstr, err))
-		}
-		ftable = append(ftable, blockID)
-
+	// Encrypt and store raw data
+	ftable, err := vaporizeData(ipfsContext, fkey, fnonce, data)
+	if err != nil {
+		return "", err
 	}
 
 	// Encrypt and store table in IPFS
-	table := pb.BlockTable{Nonce: fnonce, Blocks: ftable}
-	tableBytes, err := proto.Marshal(&table)
-	if err != nil {
-		return "", err
-	}
-	tcipher, err := NewSmogCipher(tkey, tnonce)
-	if err != nil {
-		return "", err
-	}
-	tableID, err := ipfsContext.PutBlock(tcipher.Encrypt(tableBytes))
+	table := &pb.BlockTable{Nonce: fnonce, Blocks: ftable}
+	tableID, err := vaporizeTable(ipfsContext, tkey, tnonce, table)
 	if err != nil {
 		return "", err
 	}
 
-	// Store header in IPFS, return its ID as a link to the data
-	header := pb.Header{Salt: salt, Nonce: tnonce, TableID: tableID}
-	headerBytes, err := proto.Marshal(&header)
-	if err != nil {
-		return "", err
-	}
-	headerID, err := ipfsContext.PutBlock(headerBytes)
+	// Store header in the IPFS, return its id as a link to data
+	header := &pb.Header{Salt: salt, Nonce: tnonce, TableID: tableID}
+	headerID, err := vaporizeHeader(ipfsContext, header)
 	if err != nil {
 		return "", err
 	}
 	return base58.Encode(headerID), nil
 }
 
-func getBlocks(data []byte, blocksize int) [][]byte {
+// Store raw file data in IPFS, return block id index
+func vaporizeData(ipfs IpfsContext, fkey, fnonce, data []byte) ([][]byte, error) {
+	fcipher, err := NewSmogCipher(fkey, fnonce)
+	if err != nil {
+		return nil, err
+	}
+	// Store blocks in IPFS
+	ftable := make([][]byte, 0)
+	for _, block := range chunks(fcipher.Encrypt(data), BLOCK) {
+		blockID, err := ipfs.PutBlock(block)
+		if err != nil {
+			fstr := "[vaporize]: failed to put a new block: %s"
+			return nil, errors.New(fmt.Sprintf(fstr, err))
+		}
+		ftable = append(ftable, blockID)
+	}
+	return ftable, nil
+}
+
+// Store block index in IPFS, return its ID
+func vaporizeTable(ipfs IpfsContext, tkey, tnonce []byte, table *pb.BlockTable) ([]byte, error) {
+	tableBytes, err := proto.Marshal(table)
+	if err != nil {
+		return nil, err
+	}
+	tcipher, err := NewSmogCipher(tkey, tnonce)
+	if err != nil {
+		return nil, err
+	}
+	tableID, err := ipfs.PutBlock(tcipher.Encrypt(tableBytes))
+	if err != nil {
+		return nil, err
+	}
+	return tableID, nil
+}
+
+// Store header in IPFS, return its ID
+func vaporizeHeader(ipfs IpfsContext, header *pb.Header) ([]byte, error) {
+	headerBytes, err := proto.Marshal(header)
+	if err != nil {
+		return nil, err
+	}
+	headerID, err := ipfs.PutBlock(headerBytes)
+	if err != nil {
+		return nil, err
+	}
+	return headerID, nil
+}
+
+// Break 'data' byte slice into chunks of size 'blocksize'
+func chunks(data []byte, blocksize int) [][]byte {
 	var res [][]byte
 	length := len(data)
 	for i := 0; i < length; i += blocksize {
