@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	BLOCK = 32
+	BLOCK = 1024
 	ID    = 34
 	KEY   = 32
 	NONCE = 16
@@ -20,8 +20,7 @@ const (
 )
 
 // Read file, break it into blocks and publish them into IPFS network
-// gradually encrypting each one with viewKey
-func Vaporize(passphrase, filename string) (string, error) {
+func Vaporize(filename, passphrase string, blocksize int) (string, error) {
 	// Initialize IPFS connection
 	ipfsContext, err := NewIpfsContext()
 	if err != nil {
@@ -43,7 +42,7 @@ func Vaporize(passphrase, filename string) (string, error) {
 	}
 
 	// Encrypt and store raw data
-	ftable, err := vaporizeData(ipfsContext, fkey, fnonce, data)
+	ftable, err := vaporizeData(ipfsContext, fkey, fnonce, data, blocksize)
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +64,7 @@ func Vaporize(passphrase, filename string) (string, error) {
 }
 
 // Store raw file data in IPFS, return block id index
-func vaporizeData(ipfs IpfsContext, fkey, fnonce, data []byte) ([][]byte, error) {
+func vaporizeData(ipfs IpfsContext, fkey, fnonce, data []byte, bs int) ([][]byte, error) {
 	fcipher, err := NewSmogCipher(fkey, fnonce)
 	if err != nil {
 		return nil, err

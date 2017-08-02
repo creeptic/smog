@@ -24,7 +24,8 @@ func main() {
 			if c.NArg() != 1 {
 				return missingFileArgError
 			}
-			id, err := core.Vaporize(c.String("p"), c.Args().Get(0))
+			file := c.Args().Get(0)
+			id, err := core.Vaporize(file, c.String("p"), c.Int("b"))
 			if err != nil {
 				return internalError
 			}
@@ -40,7 +41,8 @@ func main() {
 			if c.NArg() != 1 {
 				return missingHashArgError
 			}
-			cs, err := core.Condense(c.String("p"), c.Args().Get(0))
+			file := c.Args().Get(0)
+			cs, err := core.Condense(c.String("p"), file)
 			if err != nil {
 				return internalError
 			}
@@ -52,7 +54,12 @@ func main() {
 		Name:  "passphrase, p",
 		Usage: "Use `PASS` to encrypt/decrypt data",
 	}
+	blocksizeFlag := cli.IntFlag{
+		Name:  "blocksize, b",
+		Usage: "Break data into blocks of `SIZE` bytes",
+		Value: core.BLOCK,
+	}
 	app.Commands = []cli.Command{vaporizeCommand, condenseCommand}
-	app.Flags = []cli.Flag{passphraseFlag}
+	app.Flags = []cli.Flag{passphraseFlag, blocksizeFlag}
 	app.Run(os.Args)
 }

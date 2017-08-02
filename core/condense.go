@@ -10,8 +10,7 @@ import (
 	base58 "github.com/jbenet/go-base58"
 )
 
-// Gradually fetch raw blocks from IPFS network and
-// decrypt them into a file
+// Fetch raw blocks from IPFS network and decrypt them into a file
 func Condense(passphrase, head string) (string, error) {
 	// Initialize IPFS connection
 	ipfs, err := NewIpfsContext()
